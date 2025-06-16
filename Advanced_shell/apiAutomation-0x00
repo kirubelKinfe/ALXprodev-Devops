@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Script to automate API requests to Pokémon API for Pikachu data
+
+# Define variables
+POKEMON="pikachu"
+API_URL="https://pokeapi.co/api/v2/pokemon/${POKEMON}"
+OUTPUT_FILE="data.json"
+ERROR_FILE="errors.txt"
+
+# Function to check if curl is installed
+check_curl() {
+    if ! command -v curl &> /dev/null; then
+        echo "curl is not installed. Please install curl to proceed." >&2
+        exit 1
+    fi
+}
+
+# Function to make API request
+make_api_request() {
+    # Make API call and capture HTTP status code
+    http_code=$(curl -s -w "%{http_code}" -o "$OUTPUT_FILE" "$API_URL" 2>>"$ERROR_FILE")
+    
+    # Check if request was successful (HTTP 200)
+    if [ "$http_code" -ne 200 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S'): Failed to fetch data for $POKEMON. HTTP status code: $http_code" >> "$ERROR_FILE"
+        echo "Error: API request failed. Check $ERROR_FILE for details >&2"
+        exit 1
+    fi
+        echo "Successfully fetched data for $POKEMON and saved to $OUTPUT_FILE"
+}
+
+# Main execution
+
+# Check for curl
+check_curl
+
+# Create or clear error file
+: > "$ERROR_FILE"
+
+# Make the API request
+make_api_request
+
+exit 0
