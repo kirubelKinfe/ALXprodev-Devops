@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# Script to fetch Pokémon data in parallel using background processes
+
+# Define variables
+POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+OUTPUT_DIR="pokemon_data"
+ERROR_FILE="errors.txt"
+API_BASE_URL="https://pokeapi.co/api/v2/pokemon"
+MAX_RETRIES=3
+RETRY_DELAY=5
+MAX_PARALLEL=3  # Limit concurrent background processes
+
+# Function to check if curl is installed
+check_curl() {
+    if ! command -v curl &> /dev/null; then
+        echo "curl is not installed. Please install curl to proceed." >&2
+        exit 1
+    fi
+}
+
+# Function to create output directory if it doesn't exist
+create_output_dir() {
+    if [ ! -d "$OUTPUT_DIR" ]; then
+        mkdir -p "$OUTPUT_DIR"
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to create directory $OUTPUT_DIR" >&2
+            exit 1
+        fi
+    fi
+}
+
+# Function to fetch Pokémon data with retry logic
+fetch_pokemon_data() {
+    local pokemon=$1
+    local output_file="$OUTPUT_DIR/${pokemon}.json"
+    local attempt=1
+    local success=0
+
+    echo "Fetching data for $pokemon..."
+
+    while [ $attempt -le $MAX_RETRIES ] && [ $success -eq 0 ]; do
+        # Make API call and capture HTTP status code
+        http_code=$(curl -s -w "%{http_code}" -o "$output_file" "$API_BASE_URL/$pokemon" 2>>"$ERROR_FILE")
+        
+        # Check if request was successful
+        if [ "$http_code" -eq 200 ]; then
+            echo "Saved data to $output_file ✅"
+            success=1
+        else
+            echo "$(date '+%Y-%m-%d %H:%M:%S'): Attempt $attempt failed for $pokemon. HTTP status code: $http_code" >> "$ERROR_FILE"
+            if [ $attempt -lt $MAX_RETRIES ]; then
+                echo "Retrying ($attempt/$MAX_RETRIES) for $pokemon after $RETRY_DELAY seconds..."
+                sleep "$RETRY_DELAY"
+            else
+                echo "Error: Failed to fetch data for $pokemon after $MAX_RETRIES attempts. Check $ERROR_FILE for details." >&2
+                rm -f "$output_file"
+            fi
+            ((attempt++))
+        fi
+    done
+}
+
+# Function to manage parallel processes
+manage_parallel_fetch() {
+    local active_jobs=0
+    local pokemon
+
+    for pokemon in "${POKEMON_LIST[@]}"; do
+        # Wait if max parallel jobs reached
+        while [ $active_jobs -ge $MAX_PARALLEL ]; do
+            wait -n
+            ((active_jobs--))
+        done
+
+        # Start fetch in background
+        fetch_pokemon_data "$pokemon" &
+        ((active_jobs++))
+    done
+
+    # Wait for all remaining background processes to complete
+    wait
+}
+
+# Main execution
+check_curl
+
+# Create or clear error file
+: > "$ERROR_FILE"
+
+# Create output directory
+create_output_dir
+
+# Fetch data in parallel
+manage_parallel_fetch
+
+exit 0

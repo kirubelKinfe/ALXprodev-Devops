@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Script to summarize Pokémon data from JSON files and generate a CSV report
+
+# Define variables
+INPUT_DIR="pokemon_data"
+OUTPUT_FILE="pokemon_report.csv"
+TEMP_FILE="temp_pokemon_data.txt"
+
+# Function to check if required commands are installed
+check_commands() {
+    for cmd in jq awk; do
+        if ! command -v "$cmd" &> /dev/null; then
+            echo "$cmd is not installed. Please install $cmd to proceed." >&2
+            exit 1
+        fi
+    done
+}
+
+# Function to check if input directory and files exist
+check_input() {
+    if [ ! -d "$INPUT_DIR" ] || [ -z "$(ls -A "$INPUT_DIR"/*.json 2>/dev/null)" ]; then
+        echo "Error: No JSON files found in $INPUT_DIR. Please run the batch processing script first." >&2
+        exit 1
+    fi
+}
+
+# Function to extract and generate report
+generate_report() {
+    # Write CSV header
+    echo "Name,Height (m),Weight (kg)" > "$OUTPUT_FILE"
+
+    # Clear temp file if it exists
+    : > "$TEMP_FILE"
+
+    # Loop through JSON files
+    for file in "$INPUT_DIR"/*.json; do
+        if [ -f "$file" ]; then
+            # Extract data using jq
+            name=$(jq -r '.name' "$file" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+            height=$(jq -r '.height' "$file" | awk '{print $1/10}')
+            weight=$(jq -r '.weight' "$file" | awk '{print $1/10}')
+
+            # Append to CSV
+            echo "$name,$height,$weight" >> "$OUTPUT_FILE"
+
+            # Append to temp file for average calculations
+            echo "$height $weight" >> "$TEMP_FILE"
+        fi
+    done
+
+    # Calculate averages using awk
+    awk '
+        {
+            height_sum += $1
+            weight_sum += $2
+            count++
+        }
+        END {
+            avg_height = height_sum / count
+            avg_weight = weight_sum / count
+            printf "Average Height: %.2f m\n", avg_height
+            printf "Average Weight: %.2f kg\n", avg_weight
+        }
+    ' "$TEMP_FILE"
+
+    # Clean up temp file
+    rm -f "$TEMP_FILE"
+
+    echo "CSV Report generated at: $OUTPUT_FILE"
+    cat "$OUTPUT_FILE"
+}
+
+# Main execution
+check_commands
+check_input
+generate_report
+
+exit 0

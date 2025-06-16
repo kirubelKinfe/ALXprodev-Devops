@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Script to extract specific data from Pokémon API response JSON
+
+# Define input file
+INPUT_FILE="data.json"
+
+# Function to check if required commands are installed
+check_commands() {
+    for cmd in jq awk sed; do
+        if ! command -v "$cmd" &> /dev/null; then
+            echo "$cmd is not installed. Please install $cmd to proceed." >&2
+            exit 1
+        fi
+    done
+}
+
+# Function to extract and format Pokémon data
+extract_pokemon_data() {
+    # Check if input file exists
+    if [ ! -f "$INPUT_FILE" ]; then
+        echo "Error: $INPUT_FILE not found. Please run the API request script first." >&2
+        exit 1
+    fi
+
+    # Extract data using jq and format with awk and sed
+    name=$(jq -r '.name' "$INPUT_FILE" | sed 's/.*/\u&/')
+    height=$(jq -r '.height' "$INPUT_FILE" | awk '{print $1/10}')
+    weight=$(jq -r '.weight' "$INPUT_FILE" | awk '{print $1/10}')
+    type=$(jq -r '.types[0].type.name' "$INPUT_FILE" | sed 's/.*/\u&/')
+
+    # Format output
+    echo "$name is of type $type, weighs ${weight}kg, and is ${height}m tall."
+}
+
+# Main execution
+check_commands
+extract_pokemon_data
+
+exit 0
