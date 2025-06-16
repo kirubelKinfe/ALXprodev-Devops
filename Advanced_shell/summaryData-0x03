@@ -9,7 +9,7 @@ TEMP_FILE="temp_pokemon_data.txt"
 
 # Function to check if required commands are installed
 check_commands() {
-    for cmd in jq awk; do
+    for cmd in jq awk sed; do
         if ! command -v "$cmd" &> /dev/null; then
             echo "$cmd is not installed. Please install $cmd to proceed." >&2
             exit 1
@@ -36,10 +36,16 @@ generate_report() {
     # Loop through JSON files
     for file in "$INPUT_DIR"/*.json; do
         if [ -f "$file" ]; then
-            # Extract data using jq
-            name=$(jq -r '.name' "$file" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+            # Extract data using jq and format with sed and awk
+            name=$(jq -r '.name' "$file" | sed 's/^\(.\)/\U\1/')
             height=$(jq -r '.height' "$file" | awk '{print $1/10}')
             weight=$(jq -r '.weight' "$file" | awk '{print $1/10}')
+
+            # Validate extracted data
+            if [[ -z "$name" || -z "$height" || -z "$weight" ]]; then
+                echo "Warning: Incomplete data in $file, skipping..." >&2
+                continue
+            fi
 
             # Append to CSV
             echo "$name,$height,$weight" >> "$OUTPUT_FILE"
@@ -49,6 +55,13 @@ generate_report() {
         fi
     done
 
+    # Check if temp file has data
+    if [ ! -s "$TEMP_FILE" ]; then
+        echo "Error: No valid data to process for averages." >&2
+        rm -f "$TEMP_FILE"
+        exit 1
+    fi
+
     # Calculate averages using awk
     awk '
         {
@@ -57,10 +70,15 @@ generate_report() {
             count++
         }
         END {
-            avg_height = height_sum / count
-            avg_weight = weight_sum / count
-            printf "Average Height: %.2f m\n", avg_height
-            printf "Average Weight: %.2f kg\n", avg_weight
+            if (count > 0) {
+                avg_height = height_sum / count
+                avg_weight = weight_sum / count
+                printf "Average Height: %.2f m\n", avg_height
+                printf "Average Weight: %.2f kg\n", avg_weight
+            } else {
+                print "Error: No data to calculate averages" > "/dev/stderr"
+                exit 1
+            }
         }
     ' "$TEMP_FILE"
 
