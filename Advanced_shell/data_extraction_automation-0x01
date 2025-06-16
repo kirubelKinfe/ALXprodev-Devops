@@ -23,14 +23,24 @@ extract_pokemon_data() {
         exit 1
     fi
 
-    # Extract data using jq and format with awk and sed
+    # Extract data using jq
     name=$(jq -r '.name' "$INPUT_FILE" | sed 's/.*/\u&/')
-    height=$(jq -r '.height' "$INPUT_FILE" | awk '{print $1/10}')
-    weight=$(jq -r '.weight' "$INPUT_FILE" | awk '{print $1/10}')
     type=$(jq -r '.types[0].type.name' "$INPUT_FILE" | sed 's/.*/\u&/')
+    height=$(jq -r '.height' "$INPUT_FILE")
+    weight=$(jq -r '.weight' "$INPUT_FILE")
 
-    # Format output
-    echo "$name is of type $type, weighs ${weight}kg, and is ${height}m tall."
+    # Validate extracted data
+    if [[ -z "$name" || -z "$type" || -z "$height" || -z "$weight" ]]; then
+        echo "Error: Incomplete data in $INPUT_FILE." >&2
+        exit 1
+    fi
+
+    # Format height and weight using awk
+    formatted_height=$(echo "$height" | awk '{printf "%.1f", $1/10}')
+    formatted_weight=$(echo "$weight" | awk '{printf "%.1f", $1/10}' | sed 's/\.0$//')
+
+    # Output in the specified format
+    echo "$name is of type $type, weighs ${formatted_weight}kg, and is ${formatted_height}m tall."
 }
 
 # Main execution
